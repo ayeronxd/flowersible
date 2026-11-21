@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+successfully downloaded text file (SHA: 1ce4927a933a0a850c95854dd5e12063e537d65a)<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -146,26 +146,10 @@
     }
 
     .dedication-wrapper {
-      pointer-events: auto;
+      pointer-events: none;
       display: flex;
       flex-direction: column;
       align-items: center;
-    }
-
-    .edit-hint {
-      font-size: 10px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: rgba(255, 165, 198, 0.72);
-      margin-bottom: 2px;
-      opacity: 0;
-      transition: opacity 0.25s ease;
-      pointer-events: none;
-    }
-
-    .dedication-wrapper:hover .edit-hint,
-    .dedication-wrapper:focus-within .edit-hint {
-      opacity: 0.85;
     }
 
     .dedication-text {
@@ -175,10 +159,8 @@
       padding: 4px 12px;
       border-radius: 8px;
       outline: none;
-      cursor: text;
-      user-select: text;
-      -webkit-user-select: text;
-      caret-color: #ffd6e6;
+      user-select: none;
+      -webkit-user-select: none;
       white-space: nowrap;
       overflow: hidden;
       max-width: 88vw;
@@ -187,15 +169,6 @@
         0 0 14px rgba(255, 77, 136, 0.55),
         0 0 26px rgba(255, 77, 136, 0.28);
       transition: background-color 0.2s ease, text-shadow 0.2s ease;
-    }
-
-    .dedication-text:hover,
-    .dedication-text:focus {
-      background-color: rgba(255, 107, 157, 0.1);
-      text-shadow:
-        0 0 8px rgba(255, 130, 174, 1),
-        0 0 18px rgba(255, 77, 136, 0.75),
-        0 0 32px rgba(255, 77, 136, 0.42);
     }
 
     .controls-hint {
@@ -247,8 +220,7 @@
   <!-- Bottom Dedication & Faint Interaction Hint -->
   <div class="bottom-hud">
     <div class="dedication-wrapper">
-      <span class="edit-hint">click to edit</span>
-      <div id="dedicationMessage" contenteditable="true" spellcheck="false" role="textbox" aria-label="Editable bouquet dedication message" title="Click to edit dedication message" class="dedication-text">hello, gwy!</div>
+      <div id="dedicationMessage" class="dedication-text">hello, gwy!</div>
     </div>
     <div id="controlsHint" class="controls-hint faded">
       Drag to rotate • Scroll to zoom • Click to sparkle
@@ -262,7 +234,6 @@
       // =========================================================================
       // CONSTANTS, PALETTE & CAMERA DEFAULTS
       // =========================================================================
-      const STORAGE_KEY = 'ascii_3d_bouquet_dedication_v1';
       const BG_COLOR = '#1e222a';
 
       // Default 3D camera angles & zoom
@@ -1358,13 +1329,11 @@
       }
 
       // =========================================================================
-      // RETRO PILL CONTROLS & INLINE-EDITABLE DEDICATION
+      // RETRO PILL CONTROLS & FIXED DEDICATION
       // =========================================================================
       function setupUIControls() {
         const autoBtn = document.getElementById('autoRotateBtn');
         const resetBtn = document.getElementById('resetViewBtn');
-        const msgEl = document.getElementById('dedicationMessage');
-
         if (autoBtn) {
           autoBtn.addEventListener('click', () => {
             camera.autoRotate = !camera.autoRotate;
@@ -1379,35 +1348,6 @@
           });
         }
 
-        if (msgEl) {
-          // Restore saved dedication message from localStorage
-          try {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved && saved.trim().length > 0) {
-              msgEl.textContent = saved;
-            }
-          } catch (err) {
-            // Ignore storage errors in sandboxed iframes
-          }
-
-          msgEl.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              msgEl.blur();
-            }
-          });
-
-          msgEl.addEventListener('blur', () => {
-            const cleaned = msgEl.textContent.replace(/\s+/g, ' ').trim();
-            const finalText = cleaned.length > 0 ? cleaned : 'you are my favorite bloom';
-            msgEl.textContent = finalText;
-            try {
-              localStorage.setItem(STORAGE_KEY, finalText);
-            } catch (err) {
-              // Ignore storage errors
-            }
-          });
-        }
       }
 
       // =========================================================================
