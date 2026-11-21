@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>3D ASCII Flower Bouquet — Lilies, Snowdrops &amp; Yellow Tulips</title>
+  <style>
+    /* =========================================================================
+       RETRO TERMINAL & CRT BASE STYLES (ZERO EXTERNAL DEPENDENCIES)
+       ========================================================================= */
+    :root {
+      --bg-slate: #1e222a;
+      --bg-deep: #14171e;
+      --text-dim: rgba(203, 213, 225, 0.72);
+      --pill-bg: rgba(24, 28, 36, 0.76);
+      --pill-border: rgba(148, 163, 184, 0.24);
+      --pill-active-border: rgba(110, 231, 183, 0.55);
+      --pill-active-text: #86efac;
+      --pink-glow: #ff7aa8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-slate);
+      color: #e2e8f0;
+      font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Full-viewport interactive 3D ASCII canvas */
+    #bouquetCanvas {
+      position: fixed;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #bouquetCanvas.is-dragging {
+      cursor: grabbing;
+    }
+
+    /* Subtle CRT scanline & soft radial vignette overlay */
+    .crt-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% 48%, rgba(46, 56, 74, 0.14) 0%, rgba(16, 20, 28, 0.64) 100%),
+        repeating-linear-gradient(
+          0deg,
+          rgba(0, 0, 0, 0.12) 0px,
+          rgba(0, 0, 0, 0.12) 1px,
+          transparent 1px,
+          transparent 3px
+        );
+    }
+
+    /* Minimal retro terminal pill controls in top-right corner */
+    .hud-controls {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 25;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .retro-pill {
+      appearance: none;
+      border: 1px solid var(--pill-border);
+      background: var(--pill-bg);
+      color: var(--text-dim);
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      padding: 7px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+    }
+
+    .retro-pill:hover {
+      border-color: rgba(226, 232, 240, 0.48);
+      color: #f8fafc;
+      background: rgba(34, 40, 52, 0.88);
+    }
+
+    .retro-pill:active {
+      transform: scale(0.96);
+    }
+
+    .retro-pill.is-active {
+      border-color: var(--pill-active-border);
+      color: var(--pill-active-text);
+      box-shadow: 0 0 10px rgba(110, 231, 183, 0.14);
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #64748b;
+      transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .retro-pill.is-active .status-dot {
+      background: #6ee7b7;
+      box-shadow: 0 0 6px #6ee7b7;
+    }
+
+    /* Bottom centered dedication + faint interaction hint */
+    .bottom-hud {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: 92vw;
+      max-width: 640px;
+      pointer-events: none;
+      text-align: center;
+    }
+
+    .dedication-wrapper {
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .edit-hint {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255, 165, 198, 0.72);
+      margin-bottom: 2px;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+    }
+
+    .dedication-wrapper:hover .edit-hint,
+    .dedication-wrapper:focus-within .edit-hint {
+      opacity: 0.85;
+    }
+
+    .dedication-text {
+      color: var(--pink-glow);
+      font-size: clamp(13px, 2.2vw, 16px);
+      letter-spacing: 0.08em;
+      padding: 4px 12px;
+      border-radius: 8px;
+      outline: none;
+      cursor: text;
+      user-select: text;
+      -webkit-user-select: text;
+      caret-color: #ffd6e6;
+      white-space: nowrap;
+      overflow: hidden;
+      max-width: 88vw;
+      text-shadow:
+        0 0 6px rgba(255, 107, 157, 0.88),
+        0 0 14px rgba(255, 77, 136, 0.55),
+        0 0 26px rgba(255, 77, 136, 0.28);
+      transition: background-color 0.2s ease, text-shadow 0.2s ease;
+    }
+
+    .dedication-text:hover,
+    .dedication-text:focus {
+      background-color: rgba(255, 107, 157, 0.1);
+      text-shadow:
+        0 0 8px rgba(255, 130, 174, 1),
+        0 0 18px rgba(255, 77, 136, 0.75),
+        0 0 32px rgba(255, 77, 136, 0.42);
+    }
+
+    .controls-hint {
+      font-size: clamp(10px, 1.6vw, 11.5px);
+      letter-spacing: 0.06em;
+      color: rgba(148, 163, 184, 0.68);
+      transition: opacity 0.9s ease;
+      pointer-events: none;
+    }
+
+    .controls-hint.faded {
+      opacity: 0.34;
+    }
+
+    @media (max-width: 520px) {
+      .hud-controls {
+        top: 10px;
+        right: 10px;
+        gap: 6px;
+      }
+      .retro-pill {
+        font-size: 10px;
+        padding: 6px 10px;
+      }
+      .bottom-hud {
+        bottom: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Main Interactive 3D ASCII Canvas -->
+  <canvas id="bouquetCanvas" aria-label="Interactive 3D glowing ASCII art bouquet of lilies, yellow tulips, and snowdrops" width="1185" height="1035" style="width: 948px; height: 828px;" class=""></canvas>
+
+  <!-- Subtle Retro CRT Scanline & Vignette Overlay -->
+  <div class="crt-overlay" aria-hidden="true"></div>
+
+  <!-- Minimal Retro Terminal Controls -->
+  <div class="hud-controls" role="toolbar" aria-label="3D Bouquet View Controls">
+    <button id="autoRotateBtn" type="button" class="retro-pill is-active" aria-pressed="true" title="Toggle gentle auto-rotation">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span>Auto-Rotate</span>
+    </button>
+    <button id="resetViewBtn" type="button" class="retro-pill" title="Reset camera angle and zoom">
+      <span>Reset View</span>
+    </button>
+  </div>
+
+  <!-- Bottom Dedication & Faint Interaction Hint -->
+  <div class="bottom-hud">
+    <div class="dedication-wrapper">
+      <span class="edit-hint">click to edit</span>
+      <div id="dedicationMessage" contenteditable="true" spellcheck="false" role="textbox" aria-label="Editable bouquet dedication message" title="Click to edit dedication message" class="dedication-text">hello, gwy!</div>
+    </div>
+    <div id="controlsHint" class="controls-hint faded">
+      Drag to rotate • Scroll to zoom • Click to sparkle
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // =========================================================================
+      // CONSTANTS, PALETTE & CAMERA DEFAULTS
+      // =========================================================================
+      const STORAGE_KEY = 'ascii_3d_bouquet_dedication_v1';
+      const BG_COLOR = '#1e222a';
+
+      // Default 3D camera angles & zoom
+      const DEFAULT_VIEW = {
+        yaw: 0.24,
+        pitch: 0.16,
+        zoom: 1.0
+      };
+
+      // Botanical & terminal neon color palettes
+      const COLORS = {
+        // Stems & foliage greens
+        stemForest: '#2d6a4f',
+        stemEmerald: '#40916c',
+        stemSage: '#52b788',
+        stemMint: '#74c69d',
+        stemTeal: '#3f9687',
+        ribbonPink: '#f472b6',
+        ribbonSoft: '#fbcfe8',
+
+        // Lilies (white, ivory, soft blush-pink, glowing orange-gold stamens)
+        lilyWhite: '#ffffff',
+        lilyIvory: '#f6f3ea',
+        lilyBlush: '#ffd6e4',
+        lilyPinkTip: '#ff9ec0',
+        lilyStamenGold: '#ffbe0b',
+        lilyStamenOrange: '#ff7b00',
+
+        // Yellow Tulips (lemon highlight, bright yellow, golden, warm amber)
+        tulipLight: '#fff380',
+        tulipMain: '#ffd426',
+        tulipGold: '#ffb703',
+        tulipAmber: '#f48c06',
+
+        // Snowdrops (crisp snow white, ice-white, pale mint-green tip)
+        snowWhite: '#ffffff',
+        snowIce: '#e0f2fe',
+        snowMint: '#7cf5b5',
+        snowStem: '#63c795',
+
+        // Ambient hearts & sparkles
+        heartPink: '#ff5c8a',
+        heartRed: '#ff4d6d',
+        sparkleColors: ['#ffffff', '#fff380', '#ffd6e4', '#bae6fd', '#86efac', '#fbcfe8']
+      };
+
+      // =========================================================================
+      // STATE VARIABLES
+      // =========================================================================
+      let canvas, ctx;
+      let viewW = 0, viewH = 0, dpr = 1;
+      let baseScale = 1;
+
+      // 3D Camera & Inertia State
+      const camera = {
+        yaw: DEFAULT_VIEW.yaw,
+        pitch: DEFAULT_VIEW.pitch,
+        targetYaw: DEFAULT_VIEW.yaw,
+        targetPitch: DEFAULT_VIEW.pitch,
+        velYaw: 0,
+        velPitch: 0,
+        zoom: DEFAULT_VIEW.zoom,
+        targetZoom: DEFAULT_VIEW.zoom,
+        autoRotate: true,
+        resetting: false
+      };
+
+      // Pointer & Touch Gesture State
+      const input = {
+        isDragging: false,
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        lastX: 0,
+        lastY: 0,
+        movedDist: 0,
+        downTime: 0,
+        hasInteracted: false,
+        pinchDist: 0
+      };
+
+      // 3D Geometry Pools
+      let bouquetPoints = [];     // Static volumetric bouquet points
+      let ambientPoints = [];     // Floating 3D stars & ASCII hearts
+      let burstParticles = [];    // Dynamic 3D click-sparkle bursts
+      let renderBuffer = [];      // Reusable projected-point array for Z-sorting
+
+      // Deterministic PRNG so the 3D bouquet is lush and balanced every load
+      let prngSeed = 918273;
+      function rand() {
+        prngSeed = (prngSeed * 1664525 + 1013904223) % 4294967296;
+        return prngSeed / 4294967296;
+      }
+
+      // =========================================================================
+      // 3D VECTOR MATH HELPERS
+      // =========================================================================
+      function vecNormalize(x, y, z) {
+        const len = Math.hypot(x, y, z) || 1;
+        return { x: x / len, y: y / len, z: z / len };
+      }
+
+      function vecCross(a, b) {
+        return {
+          x: a.y * b.z - a.z * b.y,
+          y: a.z * b.x - a.x * b.z,
+          z: a.x * b.y - a.y * b.x
+        };
+      }
+
+      /**
+       * Builds an orthonormal 3D basis (right, up, forward) from a desired
+       * outward flower direction vector so petals & cups orient accurately in 3D.
+       */
+      function makeBasis(dir) {
+        const forward = vecNormalize(dir.x, dir.y, dir.z);
+        const worldUp = Math.abs(forward.y) > 0.94 ? { x: 0, y: 0, z: 1 } : { x: 0, y: 1, z: 0 };
+        const right = vecNormalize(
+          worldUp.y * forward.z - worldUp.z * forward.y,
+          worldUp.z * forward.x - worldUp.x * forward.z,
+          worldUp.x * forward.y - worldUp.y * forward.x
+        );
+        const up = vecCross(forward, right);
+        return { right, up, forward };
+      }
+
+      // =========================================================================
+      // 3D POINT REGISTRATION HELPER
+      // =========================================================================
+      const TIE_Y = -126; // Tied bouquet neck where stems converge
+      const BASE_Y = -172; // Cut bottom of stems
+
+      /**
+       * Adds a 3D ASCII character point to the bouquet point cloud.
+       */
+      function addPoint(x, y, z, char, color, opts = {}) {
+        // Compute natural sway factor anchored at the tied neck (TIE_Y)
+        const heightAboveTie = Math.max(0, y - TIE_Y);
+        const radialDist = Math.hypot(x, z);
+        const swayFactor = Math.pow(heightAboveTie / 250, 1.5) * (1 + radialDist / 260);
+
+        bouquetPoints.push({
+          x,
+          y,
+          z,
+          char,
+          color,
+          glow: opts.glow !== undefined ? opts.glow : 0,
+          size: opts.size !== undefined ? opts.size : 1.0,
+          bold: opts.bold || false,
+          shimmer: opts.shimmer || 0,
+          swayFactor,
+          phase: x * 0.018 + z * 0.018 + y * 0.01,
+          twinklePhase: rand() * Math.PI * 2
+        });
+      }
+
+      // =========================================================================
+      // 3D VOLUMETRIC BOTANICAL BUILDERS
+      // =========================================================================
+
+      /**
+       * Draws a 3D quadratic Bezier stem passing from the cut base, through
+       * the tied neck, curving out to the flower head.
+       */
+      function add3DStem(endX, endY, endZ, color, steps = 26, includeLowerTail = true) {
+        // Slight offset at the tied neck so stems form a cylindrical bundle
+        const ang = Math.atan2(endZ, endX);
+        const neckR = 4 + rand() * 8;
+        const nx = Math.cos(ang) * neckR;
+        const nz = Math.sin(ang) * neckR;
+
+        // Upper curving stem from tied neck to flower head
+        const ctrlX = nx + (endX - nx) * 0.42;
+        const ctrlY = TIE_Y + (endY - TIE_Y) * 0.56;
+        const ctrlZ = nz + (endZ - nz) * 0.42;
+
+        const stemChars = ['|', '/', '\\', ':', '|', ':', ';'];
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const inv = 1 - t;
+          const x = inv * inv * nx + 2 * inv * t * ctrlX + t * t * endX;
+          const y = inv * inv * TIE_Y + 2 * inv * t * ctrlY + t * t * endY;
+          const z = inv * inv * nz + 2 * inv * t * ctrlZ + t * t * endZ;
+
+          // Pick slope-inspired ASCII glyph
+          let ch = '|';
+          if (i % 4 === 0) ch = ':';
+          else if (Math.abs(endX - nx) > 25 && t > 0.25) ch = endX > 0 ? '/' : '\\';
+          else ch = stemChars[i % stemChars.length];
+
+          const col = i % 3 === 0 ? COLORS.stemForest : color;
+          addPoint(x, y, z, ch, col, { glow: 0, size: 0.94 });
+        }
+
+        // Lower splayed stem tail below the tied neck
+        if (includeLowerTail) {
+          const tailR = 14 + rand() * 14;
+          const bx = -Math.cos(ang) * tailR * 0.85 + (rand() - 0.5) * 6;
+          const bz = -Math.sin(ang) * tailR * 0.85 + (rand() - 0.5) * 6;
+          const tailSteps = 8;
+          for (let i = 1; i <= tailSteps; i++) {
+            const t = i / tailSteps;
+            const x = nx + (bx - nx) * t;
+            const y = TIE_Y + (BASE_Y - TIE_Y) * t;
+            const z = nz + (bz - nz) * t;
+            const ch = i === tailSteps ? ',' : (i % 2 === 0 ? '|' : ':');
+            addPoint(x, y, z, ch, i % 2 === 0 ? COLORS.stemForest : COLORS.stemEmerald, { glow: 0, size: 0.9 });
+          }
+        }
+      }
+
+      /**
+       * Builds the volumetric 3D cone of stems, inner foliage, ribbon tie,
+       * and curving 3D arched leaves radiating 360 degrees.
+       */
+      function buildFoliageAndBundle() {
+        // 1. Subtle glowing pink ASCII ribbon wrap around the tied neck
+        const ribbonPts = 28;
+        for (let i = 0; i < ribbonPts; i++) {
+          const a = (i / ribbonPts) * Math.PI * 2;
+          const r = 16.5;
+          const x = Math.cos(a) * r;
+          const z = Math.sin(a) * r;
+          addPoint(x, TIE_Y + 2, z, '=', COLORS.ribbonPink, { glow: 7, size: 0.95 });
+          addPoint(x, TIE_Y - 4, z, '-', COLORS.ribbonSoft, { glow: 5, size: 0.9 });
+        }
+
+        // 2. Volumetric 3D filler foliage cone (rounded 360° fan)
+        const fillerStems = 34;
+        const foliageChars = ['/', '\\', '|', ':', '-', ',', '.'];
+        const greens = [COLORS.stemForest, COLORS.stemEmerald, COLORS.stemSage, COLORS.stemTeal, COLORS.stemMint];
+
+        for (let s = 0; s < fillerStems; s++) {
+          const goldenAngle = s * 2.39996;
+          const height = -10 + rand() * 115;
+          const coneRadius = ((height - TIE_Y) / 240) * (72 + rand() * 44);
+          const ex = Math.cos(goldenAngle) * coneRadius;
+          const ez = Math.sin(goldenAngle) * coneRadius;
+          const col = greens[Math.floor(rand() * greens.length)];
+
+          add3DStem(ex, height, ez, col, 14, s % 2 === 0);
+
+          // Tiny delicate sprig tip at the top of filler foliage
+          for (let k = 0; k < 3; k++) {
+            const dx = (rand() - 0.5) * 14;
+            const dy = (rand() - 0.2) * 12;
+            const dz = (rand() - 0.5) * 14;
+            const ch = foliageChars[Math.floor(rand() * foliageChars.length)];
+            addPoint(ex + dx, height + dy, ez + dz, ch, COLORS.stemMint, { glow: 2, size: 0.88 });
+          }
+        }
+
+        // 3. Curving 3D arched leaves fanning out around the base and sides (18 leaves)
+        const leafCount = 18;
+        for (let l = 0; l < leafCount; l++) {
+          const baseAng = (l / leafCount) * Math.PI * 2 + (rand() - 0.5) * 0.22;
+          const tier = l % 2; // Alternate lower wide leaves & mid upright leaves
+          const leafLen = tier === 0 ? 92 + rand() * 26 : 112 + rand() * 24;
+          const startY = TIE_Y + 12 + tier * 22;
+          const peakY = startY + (tier === 0 ? 58 : 88);
+          const tipY = startY + (tier === 0 ? 22 : 54);
+          const leafColor = l % 3 === 0 ? COLORS.stemSage : (l % 3 === 1 ? COLORS.stemEmerald : COLORS.stemTeal);
+
+          const cosA = Math.cos(baseAng);
+          const sinA = Math.sin(baseAng);
+          // Tangent vector for giving each 3D leaf a gentle blade width
+          const tanX = -sinA;
+          const tanZ = cosA;
+
+          const segs = 12;
+          for (let i = 1; i <= segs; i++) {
+            const t = i / segs;
+            const radial = 12 + t * leafLen;
+            // Arching parabolic height curve
+            const archY = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * peakY + t * t * tipY;
+            const cx = cosA * radial;
+            const cz = sinA * radial;
+
+            // Blade narrows at base and tip, widens in the middle
+            const bladeWidth = Math.sin(t * Math.PI) * 9.5;
+            const centerChar = t > 0.8 ? '.' : (t > 0.55 ? '-' : (cosA > 0 ? '/' : '\\'));
+            addPoint(cx, archY, cz, centerChar, leafColor, { glow: 0, size: 0.96 });
+
+            if (bladeWidth > 3.5) {
+              const edgeCol = t > 0.6 ? COLORS.stemMint : COLORS.stemForest;
+              addPoint(cx + tanX * bladeWidth, archY - 1.5, cz + tanZ * bladeWidth, ',', edgeCol, { glow: 0, size: 0.85 });
+              addPoint(cx - tanX * bladeWidth, archY - 1.5, cz - tanZ * bladeWidth, ',', edgeCol, { glow: 0, size: 0.85 });
+            }
+          }
+        }
+      }
+
+      /**
+       * Builds a true 3D cup-shaped upright Yellow Tulip with a hollow curved
+       * 3-lobed petal rim, warm amber base shading, and sunlit lemon tips.
+       */
+      function add3DTulip(cx, cy, cz, scale = 1.0, tiltDir = { x: 0, y: 1, z: 0 }) {
+        // Connect stem from tied neck up to tulip base
+        const basis = makeBasis(tiltDir);
+        const cupHeight = 36 * scale;
+        const basePos = {
+          x: cx - basis.forward.x * (cupHeight * 0.42),
+          y: cy - basis.forward.y * (cupHeight * 0.42),
+          z: cz - basis.forward.z * (cupHeight * 0.42)
+        };
+        add3DStem(basePos.x, basePos.y, basePos.z, COLORS.stemEmerald, 24, true);
+
+        // Small green calyx cradle at base of cup
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2;
+          const r = 6.5 * scale;
+          const px = basePos.x + (basis.right.x * Math.cos(a) + basis.up.x * Math.sin(a)) * r;
+          const py = basePos.y + (basis.right.y * Math.cos(a) + basis.up.y * Math.sin(a)) * r;
+          const pz = basePos.z + (basis.right.z * Math.cos(a) + basis.up.z * Math.sin(a)) * r;
+          addPoint(px, py, pz, 'v', COLORS.stemSage, { glow: 2, size: 0.9 });
+        }
+
+        // Hollow 3D curved tulip cup rings (v = 0 at base, v = 1 at scalloped rim)
+        const rings = 9;
+        for (let rIdx = 0; rIdx <= rings; rIdx++) {
+          const v = rIdx / rings;
+          // Rounded goblet profile: widens quickly then curves gently inward near rim
+          const radius = (5.5 + Math.sin(Math.pow(v, 0.72) * Math.PI * 0.84) * 16.5) * scale;
+          const ptsInRing = Math.max(7, Math.round(8 + radius * 0.68));
+
+          for (let p = 0; p < ptsInRing; p++) {
+            const theta = (p / ptsInRing) * Math.PI * 2 + rIdx * 0.16;
+
+            // 3-lobed scalloped petal height modulation near the top rim
+            const lobeWave = Math.cos(theta * 3);
+            const rimLift = v > 0.55 ? (v - 0.55) * 10.5 * scale * (0.5 + 0.5 * lobeWave) : 0;
+            const localH = v * cupHeight + rimLift;
+
+            // Slight outward flare at petal tips
+            const flare = v > 0.75 ? (v - 0.75) * 7.0 * scale * (0.6 + 0.4 * lobeWave) : 0;
+            const finalR = radius + flare;
+
+            const lx = Math.cos(theta) * finalR;
+            const ly = Math.sin(theta) * finalR;
+
+            const px = basePos.x + basis.right.x * lx + basis.up.x * ly + basis.forward.x * localH;
+            const py = basePos.y + basis.right.y * lx + basis.up.y * ly + basis.forward.y * localH;
+            const pz = basePos.z + basis.right.z * lx + basis.up.z * ly + basis.forward.z * localH;
+
+            // Color gradient & character selection from amber base to bright lemon rim
+            let color = COLORS.tulipMain;
+            let ch = 'O';
+            let glow = 9;
+            if (v < 0.28) {
+              color = COLORS.tulipAmber;
+              ch = rIdx === 0 ? 'U' : '#';
+              glow = 7;
+            } else if (v < 0.58) {
+              color = COLORS.tulipGold;
+              ch = p % 2 === 0 ? '0' : 'O';
+              glow = 9;
+            } else if (v < 0.84) {
+              color = COLORS.tulipMain;
+              ch = p % 3 === 0 ? 'O' : '0';
+              glow = 11;
+            } else {
+              color = COLORS.tulipLight;
+              ch = lobeWave > 0.2 ? '0' : 'o';
+              glow = 13;
+            }
+
+            addPoint(px, py, pz, ch, color, { glow, size: 1.04, bold: v > 0.75, shimmer: v > 0.82 ? 0.15 : 0 });
+          }
+        }
+
+        // Warm glowing center tucked deep inside the tulip cup
+        for (let c = 0; c < 5; c++) {
+          const a = (c / 5) * Math.PI * 2;
+          const r = 3.2 * scale;
+          const h = cupHeight * 0.45;
+          const px = basePos.x + (basis.right.x * Math.cos(a) + basis.up.x * Math.sin(a)) * r + basis.forward.x * h;
+          const py = basePos.y + (basis.right.y * Math.cos(a) + basis.up.y * Math.sin(a)) * r + basis.forward.y * h;
+          const pz = basePos.z + (basis.right.z * Math.cos(a) + basis.up.z * Math.sin(a)) * r + basis.forward.z * h;
+          addPoint(px, py, pz, '*', COLORS.lilyStamenOrange, { glow: 12, size: 0.95, shimmer: 0.3 });
+        }
+      }
+
+      /**
+       * Builds a true 3D 6-petaled star-shaped Lily angled outward, with
+       * gracefully reflexed petals in white/cream/blush-pink and protruding
+       * 3D glowing orange-gold stamens.
+       */
+      function add3DLily(cx, cy, cz, dir, scale = 1.0, blushTint = false) {
+        const basis = makeBasis(dir);
+
+        // Stem connects behind the lily receptacle down to the bouquet neck
+        const backX = cx - basis.forward.x * 10 * scale;
+        const backY = cy - basis.forward.y * 10 * scale;
+        const backZ = cz - basis.forward.z * 10 * scale;
+        add3DStem(backX, backY, backZ, COLORS.stemSage, 24, true);
+
+        const petalCount = 6;
+        const petalLength = 34 * scale;
+
+        // Build 6 curved 3D petals (3 inner + 3 outer slightly offset in depth)
+        for (let p = 0; p < petalCount; p++) {
+          const pAngle = (p / petalCount) * Math.PI * 2 + (blushTint ? 0.25 : 0);
+          const isOuter = p % 2 === 0;
+          const cosP = Math.cos(pAngle);
+          const sinP = Math.sin(pAngle);
+
+          // Local radial axis & perpendicular width axis for this petal
+          const radVec = {
+            x: basis.right.x * cosP + basis.up.x * sinP,
+            y: basis.right.y * cosP + basis.up.y * sinP,
+            z: basis.right.z * cosP + basis.up.z * sinP
+          };
+          const tanVec = {
+            x: -basis.right.x * sinP + basis.up.x * cosP,
+            y: -basis.right.y * sinP + basis.up.y * cosP,
+            z: -basis.right.z * sinP + basis.up.z * cosP
+          };
+
+          const lengthSteps = 8;
+          for (let i = 1; i <= lengthSteps; i++) {
+            const u = i / lengthSteps; // 0 = throat, 1 = pointed tip
+            const dist = u * petalLength;
+            // Classic trumpet-then-reflexed lily curvature along flower forward axis
+            const fwdCurve = (Math.sin(u * Math.PI * 0.82) * 14 - Math.pow(u, 2.3) * 18 + (isOuter ? -2.2 : 1.5)) * scale;
+            // Pointed lance-shaped petal width
+            const halfW = Math.sin(Math.pow(u, 0.72) * Math.PI) * 9.5 * scale;
+            const widthSteps = halfW > 5.5 ? 2 : (halfW > 2.2 ? 1 : 0);
+
+            for (let w = -widthSteps; w <= widthSteps; w++) {
+              const wFrac = widthSteps > 0 ? w / widthSteps : 0;
+              const lateral = wFrac * halfW;
+              // Slight cup curl across the petal blade
+              const cupCurl = -Math.abs(wFrac) * 2.2 * scale;
+
+              const px = cx + radVec.x * dist + tanVec.x * lateral + basis.forward.x * (fwdCurve + cupCurl);
+              const py = cy + radVec.y * dist + tanVec.y * lateral + basis.forward.y * (fwdCurve + cupCurl);
+              const pz = cz + radVec.z * dist + tanVec.z * lateral + basis.forward.z * (fwdCurve + cupCurl);
+
+              let ch = 'O';
+              let color = COLORS.lilyWhite;
+              let glow = 9;
+
+              if (u < 0.26) {
+                ch = '@';
+                color = blushTint ? COLORS.lilyBlush : COLORS.lilyIvory;
+                glow = 10;
+              } else if (u < 0.72) {
+                ch = w === 0 ? '0' : (i % 2 === 0 ? 'O' : '=');
+                color = blushTint && Math.abs(wFrac) > 0.5 ? COLORS.lilyBlush : COLORS.lilyWhite;
+                glow = 10;
+              } else if (u < 0.92) {
+                ch = w === 0 ? '@' : 'O';
+                color = blushTint ? COLORS.lilyPinkTip : COLORS.lilyBlush;
+                glow = 11;
+              } else {
+                ch = '*';
+                color = blushTint ? COLORS.lilyPinkTip : COLORS.lilyWhite;
+                glow = 12;
+              }
+
+              addPoint(px, py, pz, ch, color, { glow, size: 1.02, bold: u > 0.7 });
+            }
+          }
+        }
+
+        // Protruding 3D glowing orange-gold stamens emerging forward from the center
+        const stamenCount = 6;
+        for (let s = 0; s < stamenCount; s++) {
+          const sa = (s / stamenCount) * Math.PI * 2 + 0.5;
+          const spread = 5.8 * scale;
+          const stamenLen = (15 + (s % 2) * 4) * scale;
+          const dirX = basis.right.x * Math.cos(sa) + basis.up.x * Math.sin(sa);
+          const dirY = basis.right.y * Math.cos(sa) + basis.up.y * Math.sin(sa);
+          const dirZ = basis.right.z * Math.cos(sa) + basis.up.z * Math.sin(sa);
+
+          // Filament midpoint
+          const mx = cx + dirX * (spread * 0.5) + basis.forward.x * (stamenLen * 0.55);
+          const my = cy + dirY * (spread * 0.5) + basis.forward.y * (stamenLen * 0.55);
+          const mz = cz + dirZ * (spread * 0.5) + basis.forward.z * (stamenLen * 0.55);
+          addPoint(mx, my, mz, ':', COLORS.lilyStamenGold, { glow: 10, size: 0.9 });
+
+          // Glowing orange-gold anther tip
+          const tx = cx + dirX * spread + basis.forward.x * stamenLen;
+          const ty = cy + dirY * spread + basis.forward.y * stamenLen;
+          const tz = cz + dirZ * spread + basis.forward.z * stamenLen;
+          addPoint(tx, ty, tz, s % 2 === 0 ? '*' : '@', COLORS.lilyStamenOrange, { glow: 15, size: 1.05, bold: true, shimmer: 0.35 });
+        }
+      }
+
+      /**
+       * Builds a delicate 3D Snowdrop hanging from a gracefully arched stem,
+       * with drooping crisp-white outer petals and a pale mint-green inner tip.
+       */
+      function add3DSnowdrop(angle, radialDist, bellY, scale = 1.0) {
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+
+        // Bell hangs at (bellX, bellY, bellZ)
+        const bellX = cosA * radialDist;
+        const bellZ = sinA * radialDist;
+
+        // Arch peak rises slightly inward and higher before hooking down to the bell
+        const peakR = radialDist - 18 * scale;
+        const peakX = cosA * peakR;
+        const peakY = bellY + 28 * scale;
+        const peakZ = sinA * peakR;
+
+        // Main stem from bouquet neck up to the arch peak
+        add3DStem(peakX, peakY, peakZ, COLORS.snowStem, 20, true);
+
+        // Delicate drooping hook from arch peak over and down to the top of the bell
+        const hookSteps = 8;
+        const bellTopY = bellY + 12 * scale;
+        for (let i = 1; i <= hookSteps; i++) {
+          const t = i / hookSteps;
+          const inv = 1 - t;
+          const cx = cosA * (radialDist - 4 * scale);
+          const cy = peakY + 6 * scale;
+          const cz = sinA * (radialDist - 4 * scale);
+          const x = inv * inv * peakX + 2 * inv * t * cx + t * t * bellX;
+          const y = inv * inv * peakY + 2 * inv * t * cy + t * t * bellTopY;
+          const z = inv * inv * peakZ + 2 * inv * t * cz + t * t * bellZ;
+          addPoint(x, y, z, t < 0.5 ? '-' : '\\', COLORS.snowMint, { glow: 3, size: 0.88 });
+        }
+
+        // Green ovary cap right above the white bell
+        addPoint(bellX, bellTopY, bellZ, 'o', COLORS.snowMint, { glow: 7, size: 0.96, bold: true });
+
+        // 3 drooping curved white outer bell petals hanging downward
+        const petalLen = 19 * scale;
+        for (let p = 0; p < 3; p++) {
+          const pa = angle + (p * Math.PI * 2) / 3;
+          const pCos = Math.cos(pa);
+          const pSin = Math.sin(pa);
+
+          const steps = 6;
+          for (let i = 1; i <= steps; i++) {
+            const u = i / steps;
+            // Graceful bell flare outward as it hangs downward
+            const r = Math.sin(u * Math.PI * 0.65) * 10.5 * scale + u * 2.2 * scale;
+            const y = bellTopY - u * petalLen;
+            const px = bellX + pCos * r;
+            const pz = bellZ + pSin * r;
+
+            let ch = 'o';
+            if (i === 1) ch = p % 2 === 0 ? '(' : ')';
+            else if (i === steps) ch = '.';
+            else if (i === steps - 1) ch = 'v';
+            else ch = i % 2 === 0 ? 'o' : (p === 0 ? '(' : ')');
+
+            addPoint(px, y, pz, ch, i > 4 ? COLORS.snowIce : COLORS.snowWhite, {
+              glow: 11,
+              size: 1.0,
+              bold: i === 2 || i === 3,
+              shimmer: i >= 4 ? 0.22 : 0
+            });
+          }
+        }
+
+        // Inner drooping mint-green tipped skirt inside the snowdrop bell
+        for (let k = 0; k < 4; k++) {
+          const ka = angle + (k * Math.PI) / 2 + 0.4;
+          const r = 3.8 * scale;
+          addPoint(
+            bellX + Math.cos(ka) * r,
+            bellTopY - 10 * scale,
+            bellZ + Math.sin(ka) * r,
+            'v',
+            COLORS.snowMint,
+            { glow: 10, size: 0.92, shimmer: 0.28 }
+          );
+        }
+        addPoint(bellX, bellTopY - 14 * scale, bellZ, ':', COLORS.snowMint, { glow: 11, size: 0.92, shimmer: 0.35 });
+      }
+
+      // =========================================================================
+      // ASSEMBLE THE FULL 360-DEGREE 3D BOUQUET
+      // =========================================================================
+      function build3DBouquet() {
+        prngSeed = 918273;
+        bouquetPoints = [];
+
+        // 1. Volumetric foliage, stems, ribbon wrap & 3D arched leaves
+        buildFoliageAndBundle();
+
+        // 2. Yellow Tulips (6 upright cup-shaped blooms near upper center & mid-crown)
+        add3DTulip(0, 118, 0, 1.08, { x: 0, y: 1, z: 0 }); // Tall central crown tulip
+        const tulipRingCount = 5;
+        for (let i = 0; i < tulipRingCount; i++) {
+          const a = (i / tulipRingCount) * Math.PI * 2 + 0.32;
+          const r = 46 + (i % 2) * 10;
+          const y = 86 + (i % 2) * 14;
+          const x = Math.cos(a) * r;
+          const z = Math.sin(a) * r;
+          add3DTulip(x, y, z, 0.94 + (i % 2) * 0.08, {
+            x: Math.cos(a) * 0.34,
+            y: 1.0,
+            z: Math.sin(a) * 0.34
+          });
+        }
+
+        // 3. Lilies (5 large 6-petaled star blooms arranged 360° around the mid-upper tier)
+        const lilyCount = 5;
+        for (let i = 0; i < lilyCount; i++) {
+          const a = (i / lilyCount) * Math.PI * 2 + 0.95;
+          const r = 74 + (i % 2) * 12;
+          const y = 34 + (i % 2) * 18;
+          const x = Math.cos(a) * r;
+          const z = Math.sin(a) * r;
+          const dir = {
+            x: Math.cos(a) * 0.85,
+            y: 0.45,
+            z: Math.sin(a) * 0.85
+          };
+          add3DLily(x, y, z, dir, 0.96 + (i % 2) * 0.09, i % 2 === 0);
+        }
+
+        // 4. Snowdrops (8 delicate drooping white bells along the outer edges & lower tier)
+        const snowdropCount = 8;
+        for (let i = 0; i < snowdropCount; i++) {
+          const a = (i / snowdropCount) * Math.PI * 2 + 0.18;
+          const r = 104 + (i % 2) * 16;
+          const y = -12 + (i % 3) * 18;
+          add3DSnowdrop(a, r, y, 0.96 + (i % 2) * 0.1);
+        }
+      }
+
+      // =========================================================================
+      // 3D AMBIENT SPARKLES & FLOATING ASCII HEARTS (PARALLAX SHELL)
+      // =========================================================================
+      function buildAmbient3D() {
+        ambientPoints = [];
+        const sparkleChars = ['*', '+', '.', 'o'];
+
+        // 85 floating 3D ASCII sparkles in a spherical shell around the bouquet
+        for (let i = 0; i < 85; i++) {
+          const theta = rand() * Math.PI * 2;
+          const phi = Math.acos(2 * rand() - 1);
+          const radius = 175 + rand() * 235;
+
+          ambientPoints.push({
+            x: radius * Math.sin(phi) * Math.cos(theta),
+            y: radius * Math.cos(phi) * 0.85,
+            z: radius * Math.sin(phi) * Math.sin(theta),
+            char: sparkleChars[Math.floor(rand() * sparkleChars.length)],
+            color: COLORS.sparkleColors[Math.floor(rand() * COLORS.sparkleColors.length)],
+            isHeart: false,
+            glow: 7,
+            size: 0.88 + rand() * 0.35,
+            speed: 0.9 + rand() * 1.9,
+            phase: rand() * Math.PI * 2,
+            bobAmp: 4 + rand() * 8
+          });
+        }
+
+        // 12 floating glowing pink/red 3D ASCII hearts ('<3', '(v)', '♥')
+        const heartGlyphs = ['<3', '(v)', '♥'];
+        for (let i = 0; i < 12; i++) {
+          const theta = (i / 12) * Math.PI * 2 + rand() * 0.35;
+          const radius = 165 + rand() * 135;
+          const y = -90 + rand() * 225;
+
+          ambientPoints.push({
+            x: Math.cos(theta) * radius,
+            y,
+            z: Math.sin(theta) * radius,
+            char: heartGlyphs[i % heartGlyphs.length],
+            color: i % 2 === 0 ? COLORS.heartPink : COLORS.heartRed,
+            isHeart: true,
+            glow: 12,
+            size: 1.02,
+            speed: 1.1 + rand() * 0.9,
+            phase: rand() * Math.PI * 2,
+            bobAmp: 8 + rand() * 7
+          });
+        }
+      }
+
+      // =========================================================================
+      // CLICK-TO-SPARKLE 3D PARTICLE BURST
+      // =========================================================================
+      function spawn3DSparkleBurst(clientX, clientY) {
+        // Unproject rough screen click offset into 3D bouquet space (inverse rotated)
+        const nx = (clientX - viewW * 0.5) / (baseScale * camera.zoom);
+        const ny = -(clientY - viewH * 0.49) / (baseScale * camera.zoom);
+
+        // Inverse rotate screen offset by current yaw & pitch so burst starts near cursor
+        const cosY = Math.cos(-camera.yaw);
+        const sinY = Math.sin(-camera.yaw);
+        const cosP = Math.cos(-camera.pitch);
+        const sinP = Math.sin(-camera.pitch);
+
+        const y1 = ny * cosP;
+        const z1 = ny * sinP;
+        const originX = Math.max(-130, Math.min(130, nx * cosY + z1 * sinY));
+        const originY = Math.max(-130, Math.min(130, y1));
+        const originZ = Math.max(-130, Math.min(130, -nx * sinY + z1 * cosY));
+
+        const chars = ['*', '+', 'o', '.', '✦'];
+        const count = 26;
+
+        for (let i = 0; i < count; i++) {
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.acos(2 * Math.random() - 1);
+          const speed = 42 + Math.random() * 115;
+
+          burstParticles.push({
+            x: originX + (Math.random() - 0.5) * 14,
+            y: originY + (Math.random() - 0.5) * 14,
+            z: originZ + (Math.random() - 0.5) * 14,
+            vx: Math.sin(phi) * Math.cos(theta) * speed,
+            vy: Math.cos(phi) * speed + 24,
+            vz: Math.sin(phi) * Math.sin(theta) * speed,
+            char: chars[Math.floor(Math.random() * chars.length)],
+            color: COLORS.sparkleColors[Math.floor(Math.random() * COLORS.sparkleColors.length)],
+            life: 1.0,
+            decay: 0.65 + Math.random() * 0.55
+          });
+        }
+
+        // Keep particle count bounded for smooth performance
+        if (burstParticles.length > 160) {
+          burstParticles.splice(0, burstParticles.length - 160);
+        }
+      }
+
+      // =========================================================================
+      // RESPONSIVE CANVAS SIZING
+      // =========================================================================
+      function resizeCanvas() {
+        if (!canvas) return;
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        viewW = window.innerWidth;
+        viewH = window.innerHeight;
+
+        canvas.width = Math.floor(viewW * dpr);
+        canvas.height = Math.floor(viewH * dpr);
+        canvas.style.width = `${viewW}px`;
+        canvas.style.height = `${viewH}px`;
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Fit the 3D bouquet comfortably in both portrait & landscape screens
+        const minDim = Math.min(viewW, viewH * 0.92);
+        baseScale = Math.max(0.65, minDim / 410);
+      }
+
+      // =========================================================================
+      // 3D PROJECTION & 60 FPS PAINTER'S ALGORITHM RENDER LOOP
+      // =========================================================================
+      let lastTime = 0;
+
+      function render(timestamp) {
+        const dt = Math.min(0.05, (timestamp - lastTime) / 1000 || 0.016);
+        lastTime = timestamp;
+        const t = timestamp * 0.001;
+
+        // 1. Update camera rotation, momentum inertia, auto-rotation & smooth reset
+        if (camera.resetting) {
+          camera.yaw += (DEFAULT_VIEW.yaw - camera.yaw) * Math.min(1, dt * 7);
+          camera.pitch += (DEFAULT_VIEW.pitch - camera.pitch) * Math.min(1, dt * 7);
+          camera.targetZoom += (DEFAULT_VIEW.zoom - camera.targetZoom) * Math.min(1, dt * 7);
+          camera.velYaw *= 0.7;
+          camera.velPitch *= 0.7;
+
+          if (
+            Math.abs(camera.yaw - DEFAULT_VIEW.yaw) < 0.004 &&
+            Math.abs(camera.pitch - DEFAULT_VIEW.pitch) < 0.004 &&
+            Math.abs(camera.targetZoom - DEFAULT_VIEW.zoom) < 0.004
+          ) {
+            camera.resetting = false;
+          }
+        } else if (!input.isDragging) {
+          camera.yaw += camera.velYaw;
+          camera.pitch += camera.velPitch;
+          // Smooth rotational inertia damping
+          const damping = Math.pow(0.92, dt * 60);
+          camera.velYaw *= damping;
+          camera.velPitch *= damping;
+
+          // Gentle idle auto-rotation when user isn't dragging
+          if (camera.autoRotate) {
+            camera.yaw += 0.24 * dt;
+          }
+        }
+
+        // Clamp vertical pitch to prevent awkward upside-down flipping
+        camera.pitch = Math.max(-1.18, Math.min(1.18, camera.pitch));
+
+        // Smooth zoom interpolation
+        camera.zoom += (camera.targetZoom - camera.zoom) * Math.min(1, dt * 10);
+
+        // 2. Precompute 3D rotation matrix trigonometry (Yaw around Y, then Pitch around X)
+        const cosY = Math.cos(camera.yaw);
+        const sinY = Math.sin(camera.yaw);
+        const cosP = Math.cos(camera.pitch);
+        const sinP = Math.sin(camera.pitch);
+
+        const fov = 560;
+        const camDist = 470 / camera.zoom;
+        const centerX = viewW * 0.5;
+        const centerY = viewH * 0.49;
+
+        // Subtle organic 3D wind-sway
+        const windX = Math.sin(t * 1.15) * 8.5 + Math.sin(t * 2.05) * 2.6;
+        const windZ = Math.cos(t * 0.92) * 6.5;
+
+        // Clear reusable projection list
+        renderBuffer.length = 0;
+
+        // Helper to project a 3D world point into 2D screen coordinates + depth info
+        function projectPoint(wx, wy, wz, char, color, glow, size, bold, alphaMod) {
+          // Rotate around Y axis (yaw)
+          const rx = wx * cosY - wz * sinY;
+          const rz1 = wx * sinY + wz * cosY;
+
+          // Rotate around X axis (pitch)
+          const ry = wy * cosP - rz1 * sinP;
+          const rz = wy * sinP + rz1 * cosP;
+
+          const zCam = camDist - rz;
+          if (zCam < 45) return; // Clip points behind camera
+
+          const persp = (fov / zCam) * baseScale;
+          const sx = centerX + rx * persp;
+          const sy = centerY - ry * persp;
+
+          // Cull points well outside viewport
+          if (sx < -40 || sx > viewW + 40 || sy < -40 || sy > viewH + 40) return;
+
+          // Normalized depth factor (0 = far back, 1 = front foreground)
+          const depthNorm = Math.max(0, Math.min(1, (rz + 210) / 420));
+
+          renderBuffer.push({
+            sx,
+            sy,
+            zCam,
+            persp,
+            depthNorm,
+            char,
+            color,
+            glow,
+            size,
+            bold,
+            alphaMod
+          });
+        }
+
+        // 3. Project all volumetric 3D bouquet points with organic wind-sway
+        for (let i = 0; i < bouquetPoints.length; i++) {
+          const p = bouquetPoints[i];
+          const localWave = Math.sin(t * 1.55 + p.phase) * 3.0;
+          const wx = p.x + (windX + localWave) * p.swayFactor;
+          const wy = p.y - Math.abs(windX) * 0.08 * p.swayFactor;
+          const wz = p.z + (windZ + localWave * 0.7) * p.swayFactor;
+
+          let alphaMod = 1.0;
+          if (p.shimmer > 0) {
+            alphaMod = 1.0 - p.shimmer + p.shimmer * (0.5 + 0.5 * Math.sin(t * 3.8 + p.twinklePhase));
+          }
+
+          projectPoint(wx, wy, wz, p.char, p.color, p.glow, p.size, p.bold, alphaMod);
+        }
+
+        // 4. Project floating 3D ambient sparkles & hearts
+        for (let i = 0; i < ambientPoints.length; i++) {
+          const a = ambientPoints[i];
+          const wy = a.y + Math.sin(t * a.speed + a.phase) * a.bobAmp;
+          const wx = a.x + Math.cos(t * a.speed * 0.65 + a.phase) * (a.isHeart ? 5 : 2.5);
+          const twinkle = a.isHeart
+            ? 0.72 + 0.28 * Math.sin(t * 2.0 + a.phase)
+            : 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * a.speed * 1.6 + a.phase));
+
+          projectPoint(wx, wy, a.z, a.char, a.color, a.glow, a.size, a.isHeart, twinkle);
+        }
+
+        // 5. Update & project dynamic 3D click-sparkle burst particles
+        for (let i = burstParticles.length - 1; i >= 0; i--) {
+          const bp = burstParticles[i];
+          bp.x += bp.vx * dt;
+          bp.y += bp.vy * dt;
+          bp.z += bp.vz * dt;
+          bp.vx *= 0.96;
+          bp.vy = bp.vy * 0.96 - 18 * dt;
+          bp.vz *= 0.96;
+          bp.life -= bp.decay * dt;
+
+          if (bp.life <= 0) {
+            burstParticles.splice(i, 1);
+            continue;
+          }
+
+          projectPoint(bp.x, bp.y, bp.z, bp.char, bp.color, 13, 1.12, true, bp.life);
+        }
+
+        // 6. Painter's Algorithm: sort back-to-front (largest zCam drawn first)
+        renderBuffer.sort((a, b) => b.zCam - a.zCam);
+
+        // 7. Clear dark slate background
+        ctx.fillStyle = BG_COLOR;
+        ctx.fillRect(0, 0, viewW, viewH);
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // 8. Draw sorted 3D ASCII characters with depth scaling, fog & neon glow
+        let lastFont = '';
+        let lastColor = '';
+        let lastGlow = -1;
+
+        for (let i = 0; i < renderBuffer.length; i++) {
+          const item = renderBuffer[i];
+
+          // Perspective font size quantized to 1px buckets for crispness & speed
+          const pxSize = Math.max(7, Math.min(28, Math.round(11.4 * item.persp * item.size)));
+          const fontStr = `${item.bold ? '700' : '600'} ${pxSize}px "JetBrains Mono", ui-monospace, monospace`;
+          if (fontStr !== lastFont) {
+            ctx.font = fontStr;
+            lastFont = fontStr;
+          }
+
+          if (item.color !== lastColor) {
+            ctx.fillStyle = item.color;
+            lastColor = item.color;
+          }
+
+          // Depth-based atmospheric fog / brightness
+          const depthAlpha = 0.24 + 0.76 * item.depthNorm;
+          ctx.globalAlpha = Math.max(0.08, Math.min(1, depthAlpha * item.alphaMod));
+
+          // Selective depth-scaled neon glow (keeps 60 FPS smooth while flowers glow richly)
+          const effGlow = item.glow > 0 && item.depthNorm > 0.28
+            ? Math.round(item.glow * (0.45 + 0.65 * item.depthNorm))
+            : 0;
+
+          if (effGlow !== lastGlow) {
+            ctx.shadowBlur = effGlow;
+            lastGlow = effGlow;
+          }
+          if (effGlow > 0) {
+            ctx.shadowColor = item.color;
+          }
+
+          ctx.fillText(item.char, item.sx, item.sy);
+        }
+
+        // Reset canvas state cleanly
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+
+        requestAnimationFrame(render);
+      }
+
+      // =========================================================================
+      // INTERACTION: DRAG ROTATION, MOMENTUM, WHEEL/PINCH ZOOM, CLICK SPARKLES
+      // =========================================================================
+      function markUserInteracted() {
+        if (input.hasInteracted) return;
+        input.hasInteracted = true;
+        const hintEl = document.getElementById('controlsHint');
+        if (hintEl) hintEl.classList.add('faded');
+      }
+
+      function setupInteractions() {
+        // Mouse Drag & Click
+        canvas.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return;
+          camera.resetting = false;
+          input.isDragging = true;
+          input.startX = e.clientX;
+          input.startY = e.clientY;
+          input.lastX = e.clientX;
+          input.lastY = e.clientY;
+          input.movedDist = 0;
+          input.downTime = performance.now();
+          camera.velYaw = 0;
+          camera.velPitch = 0;
+          canvas.classList.add('is-dragging');
+        });
+
+        window.addEventListener('mousemove', (e) => {
+          if (!input.isDragging) return;
+          const dx = e.clientX - input.lastX;
+          const dy = e.clientY - input.lastY;
+          input.lastX = e.clientX;
+          input.lastY = e.clientY;
+          input.movedDist += Math.hypot(dx, dy);
+
+          if (input.movedDist > 4) {
+            markUserInteracted();
+          }
+
+          const sensitivity = 0.0072;
+          camera.yaw += dx * sensitivity;
+          camera.pitch += dy * sensitivity;
+          camera.velYaw = dx * sensitivity * 0.85;
+          camera.velPitch = dy * sensitivity * 0.85;
+        });
+
+        window.addEventListener('mouseup', (e) => {
+          if (!input.isDragging) return;
+          input.isDragging = false;
+          canvas.classList.remove('is-dragging');
+
+          // Quick click without dragging emits a glowing 3D sparkle burst
+          const elapsed = performance.now() - input.downTime;
+          if (input.movedDist < 7 && elapsed < 320) {
+            markUserInteracted();
+            spawn3DSparkleBurst(e.clientX, e.clientY);
+          }
+        });
+
+        // Mouse Wheel Zoom
+        canvas.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          camera.resetting = false;
+          markUserInteracted();
+          const zoomDelta = -e.deltaY * 0.0011;
+          camera.targetZoom = Math.max(0.55, Math.min(2.15, camera.targetZoom * (1 + zoomDelta)));
+        }, { passive: false });
+
+        // Touch Drag, Tap-to-Sparkle & Pinch-to-Zoom
+        canvas.addEventListener('touchstart', (e) => {
+          camera.resetting = false;
+          if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            input.isDragging = true;
+            input.startX = touch.clientX;
+            input.startY = touch.clientY;
+            input.lastX = touch.clientX;
+            input.lastY = touch.clientY;
+            input.movedDist = 0;
+            input.downTime = performance.now();
+            camera.velYaw = 0;
+            camera.velPitch = 0;
+          } else if (e.touches.length === 2) {
+            input.isDragging = false;
+            input.pinchDist = Math.hypot(
+              e.touches[0].clientX - e.touches[1].clientX,
+              e.touches[0].clientY - e.touches[1].clientY
+            );
+          }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+          if (e.touches.length === 1 && input.isDragging) {
+            const touch = e.touches[0];
+            const dx = touch.clientX - input.lastX;
+            const dy = touch.clientY - input.lastY;
+            input.lastX = touch.clientX;
+            input.lastY = touch.clientY;
+            input.movedDist += Math.hypot(dx, dy);
+
+            if (input.movedDist > 4) {
+              markUserInteracted();
+            }
+
+            const sensitivity = 0.0082;
+            camera.yaw += dx * sensitivity;
+            camera.pitch += dy * sensitivity;
+            camera.velYaw = dx * sensitivity * 0.85;
+            camera.velPitch = dy * sensitivity * 0.85;
+          } else if (e.touches.length === 2) {
+            markUserInteracted();
+            const newDist = Math.hypot(
+              e.touches[0].clientX - e.touches[1].clientX,
+              e.touches[0].clientY - e.touches[1].clientY
+            );
+            if (input.pinchDist > 0) {
+              const ratio = newDist / input.pinchDist;
+              camera.targetZoom = Math.max(0.55, Math.min(2.15, camera.targetZoom * ratio));
+            }
+            input.pinchDist = newDist;
+          }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+          if (e.touches.length === 0) {
+            if (input.isDragging) {
+              const elapsed = performance.now() - input.downTime;
+              if (input.movedDist < 10 && elapsed < 320 && e.changedTouches.length > 0) {
+                markUserInteracted();
+                const t0 = e.changedTouches[0];
+                spawn3DSparkleBurst(t0.clientX, t0.clientY);
+              }
+            }
+            input.isDragging = false;
+            input.pinchDist = 0;
+          }
+        }, { passive: true });
+      }
+
+      // =========================================================================
+      // RETRO PILL CONTROLS & INLINE-EDITABLE DEDICATION
+      // =========================================================================
+      function setupUIControls() {
+        const autoBtn = document.getElementById('autoRotateBtn');
+        const resetBtn = document.getElementById('resetViewBtn');
+        const msgEl = document.getElementById('dedicationMessage');
+
+        if (autoBtn) {
+          autoBtn.addEventListener('click', () => {
+            camera.autoRotate = !camera.autoRotate;
+            autoBtn.classList.toggle('is-active', camera.autoRotate);
+            autoBtn.setAttribute('aria-pressed', String(camera.autoRotate));
+          });
+        }
+
+        if (resetBtn) {
+          resetBtn.addEventListener('click', () => {
+            camera.resetting = true;
+          });
+        }
+
+        if (msgEl) {
+          // Restore saved dedication message from localStorage
+          try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved && saved.trim().length > 0) {
+              msgEl.textContent = saved;
+            }
+          } catch (err) {
+            // Ignore storage errors in sandboxed iframes
+          }
+
+          msgEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              msgEl.blur();
+            }
+          });
+
+          msgEl.addEventListener('blur', () => {
+            const cleaned = msgEl.textContent.replace(/\s+/g, ' ').trim();
+            const finalText = cleaned.length > 0 ? cleaned : 'you are my favorite bloom';
+            msgEl.textContent = finalText;
+            try {
+              localStorage.setItem(STORAGE_KEY, finalText);
+            } catch (err) {
+              // Ignore storage errors
+            }
+          });
+        }
+      }
+
+      // =========================================================================
+      // INITIALIZATION ON WINDOW LOAD
+      // =========================================================================
+      window.addEventListener('load', () => {
+        try {
+          canvas = document.getElementById('bouquetCanvas');
+          if (!canvas) return;
+          ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          build3DBouquet();
+          buildAmbient3D();
+          setupInteractions();
+          setupUIControls();
+          resizeCanvas();
+
+          window.addEventListener('resize', resizeCanvas);
+          requestAnimationFrame(render);
+        } catch (err) {
+          console.error('Failed to initialize 3D ASCII Bouquet:', err);
+        }
+      });
+    })();
+  </script>
+
+</body></html>
